@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Monthly Hisab</title>
+<style>
+:root{--bg:#071023;--card:#0b1220;--accent:#06b6d4;--muted:#9aa6b2}
+html,body{height:100%;margin:0;background:linear-gradient(180deg,#071023,#081426);color:#e6eef6;font-family:Inter,system-ui,Arial,sans-serif}
+.app{width:100vw;max-width:420px;margin:0 auto;padding:12px;box-sizing:border-box}
+header{display:flex;align-items:center;gap:8px;margin-bottom:8px}.brand{font-weight:700;font-size:18px}
+.tabs{display:flex;gap:8px;margin-bottom:10px}.tab{flex:1;padding:8px;border-radius:10px;background:rgba(255,255,255,0.03);text-align:center;font-weight:600}.tab.active{background:linear-gradient(90deg,var(--accent),#7c3aed);color:#02111a}
+.form{padding:10px;border-radius:10px;background:rgba(255,255,255,0.02)}
+.row{display:flex;gap:8px;margin-bottom:8px}.row .col{flex:1}
+input,select,button{width:100%;padding:8px;border-radius:8px;border:0;background:rgba(255,255,255,0.03);color:inherit;box-sizing:border-box}
+button.primary{background:linear-gradient(90deg,var(--accent),#7c3aed);color:#02111a;font-weight:700}
+.controls{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:nowrap}
+.small-btn{padding:6px 8px;border-radius:8px;border:0;background:rgba(255,255,255,0.04);font-weight:600;font-size:12px}
+.table-wrap{overflow-x:auto}
+.table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+.table td{padding:6px;border-top:1px dashed rgba(255,255,255,0.03);vertical-align:middle}
+.truncate{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:120px}
+.small-amt{text-align:right}
+.canvas-wrap{background:rgba(255,255,255,0.02);padding:8px;border-radius:10px;margin-bottom:8px}
+footer{margin-top:12px;text-align:center;color:#9aa6b2;font-size:12px}
+.loader{height:5px;border-radius:6px;background:linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.14));overflow:hidden;position:relative;margin-bottom:10px;display:none}
+.loader::after{content:'';position:absolute;left:-30%;top:0;bottom:0;width:30%;background:linear-gradient(90deg,rgba(255,255,255,0.12),rgba(255,255,255,0.02));animation:run 1.1s linear infinite}
+@keyframes run{100%{left:110%}}
+@media (max-width:360px){ .truncate{max-width:90px} canvas{height:120px} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header><div class="brand">My Monthly Expenses</div><div id="monthLabel" style="margin-left:auto;color:#9aa6b2;font-size:12px"></div></header>
+<br></br>
+  <div class="tabs"><div class="tab active" data-tab="entry">Entry</div><div class="tab" data-tab="report">Report</div></div>
+  <div id="loader" class="loader"></div>
+  <div id="entry">
+    <div class="form">
+      <div class="row"><div class="col"><input id="date" type="date"/></div><div class="col"><input id="amount" placeholder="Amount (Eg. +200 / -200 )"/></div></div>
+      <div class="row"><input id="desc" placeholder="Description"/></div>
+      <div class="row"><select id="categorySelect"></select><button id="addCatBtn" class="small-btn">+</button></div>
+      <div style="height:8px"></div>
+      <div style="display:flex;gap:8px"><button id="submitBtn" class="primary" style="flex:1">Save Entry</button><button id="deleteBtn" class="small-btn" style="display:none">Delete</button></div>
+    </div>
+  </div>
+
+  <div id="report" style="display:none">
+    <div class="controls">
+      <select id="monthSelect" style="flex:1;min-width:120px"></select>
+      <button id="createMonthBtn" class="small-btn">+ Month</button>
+      <button id="refreshBtn" class="small-btn">Refresh</button>
+      <button id="downloadBtn" class="small-btn">Download</button>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <div style="flex:1;padding:8px;border-radius:10px;background:rgba(255,255,255,0.02)"><h3 style="margin:0;font-size:12px;color:#9aa6b2">Income</h3><p id="incomeVal" style="margin:6px 0 0;font-weight:700">₹0</p></div>
+      <div style="flex:1;padding:8px;border-radius:10px;background:rgba(255,255,255,0.02)"><h3 style="margin:0;font-size:12px;color:#9aa6b2">Expense</h3><p id="expenseVal" style="margin:6px 0 0;font-weight:700">₹0</p></div>
+      <div style="flex:1;padding:8px;border-radius:10px;background:rgba(255,255,255,0.02)"><h3 style="margin:0;font-size:12px;color:#9aa6b2">Balance</h3><p id="balVal" style="margin:6px 0 0;font-weight:700">₹0</p></div>
+    </div>
+
+    <div class="canvas-wrap"><canvas id="catChart"></canvas></div>
+
+    <div class="table-wrap"><table class="table" id="historyTable"><thead><tr><td style="width:16%">Date</td><td style="width:42%">Description</td><td style="width:20%">Category</td><td style="width:11%;text-align:right">Amount</td><td style="width:11%;text-align:right">Flow</td></tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <footer></footer>
+</div>
+
+<script>
+/* ===== CONFIG ===== */
+const API_BASE = 'https://script.google.com/macros/s/AKfycbzO9GrlvEKUkeXchPqVqaqP25Tgd-lRgGvudIz0VsGyuE6b-IHcFokxLja59li53BlhdQ/exec'; // must end with /exec
+const state = { rows: [], income:0, expense:0, balance:0, categories:[], categoriesMap:{}, currentSheet:'' };
+const loader = document.getElementById('loader');
+function showLoader(v){ loader.style.display = v ? 'block' : 'none'; }
+const $ = s => document.querySelector(s);
+
+/* ===== HELPERS ===== */
+function formatNumber(n){ if(n==null) return '0'; return Number(n).toLocaleString(); }
+function escapeHTML(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toDDMMYYYYFromISO(iso){ if(!iso) return ''; if(/^\d{4}-\d{2}-\d{2}$/.test(iso)){ const [y,m,d]=iso.split('-'); return d+'/'+m+'/'+y } if(/^\d{2}\/\d{2}\/\d{4}$/.test(iso)) return iso; const dt=new Date(iso); if(isNaN(dt)) return String(iso); return ('0'+dt.getDate()).slice(-2)+'/'+('0'+(dt.getMonth()+1)).slice(-2)+'/'+dt.getFullYear(); }
+function toSheetDateFromPicker(val){ return toDDMMYYYYFromISO(val); }
+
+/* ===== NETWORK with JSONP fallback (now includes update/delete fallback) ===== */
+function jsonpCall(params, cbName){ const q = Object.keys(params).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&'); const s = document.createElement('script'); s.src = API_BASE + '?' + q + '&callback=' + cbName; document.head.appendChild(s); setTimeout(()=>s.remove(), 60000); }
+async function safeGet(params){
+  const qs = new URLSearchParams(params).toString();
+  try{
+    const res = await fetch(API_BASE + (qs ? ('?' + qs) : '')); const txt = await res.text(); try{ return JSON.parse(txt); }catch(e){ return { error:'Invalid JSON from server' }; }
+  }catch(err){
+    return new Promise((resolve)=>{
+      const cb = 'hisab_jsonp_cb_' + Math.floor(Math.random()*999999);
+      window[cb] = function(data){ resolve(data); try{ delete window[cb]; }catch(e){} };
+      jsonpCall(params, cb);
+      setTimeout(()=>{ if(window[cb]){ resolve({ error:'jsonp timeout' }); try{ delete window[cb]; }catch(e){} } }, 10000);
+    });
+  }
+}
+async function safePost(body){
+  try{
+    const res = await fetch(API_BASE, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+    const txt = await res.text(); try{ return JSON.parse(txt); }catch(e){ return { error:'Invalid JSON from server' }; }
+  }catch(err){
+    // fallback via JSONP GET for supported actions (including update/delete now)
+    const fallbackActions = ['add','addCategory','createMonth','update','delete'];
+    if(fallbackActions.indexOf(body.action) === -1) return { error: 'Network error' };
+    return new Promise((resolve)=>{
+      const cb = 'hisab_jsonp_cb_' + Math.floor(Math.random()*999999);
+      window[cb] = function(data){ resolve(data); try{ delete window[cb]; }catch(e){} };
+      const params = Object.assign({}, body);
+      if(params.item){ const it = params.item; delete params.item; params.date = it.date; params.description = it.description; params.category = it.category; params.amount = it.amount; }
+      jsonpCall(params, cb);
+      setTimeout(()=>{ if(window[cb]){ resolve({ error:'jsonp timeout' }); try{ delete window[cb]; }catch(e){} } }, 10000);
+    });
+  }
+}
+
+/* ===== APP LOGIC ===== */
+
+async function loadLists(){ showLoader(true); try{ const res = await safeGet({ action:'list' }); if(res && !res.error){ populateMonthSelect(res.sheets||[]); populateCategorySelect(res.categories||[]); } else console.error('loadLists', res && res.error); }catch(e){console.error(e);} finally{ showLoader(false); } }
+
+function populateMonthSelect(names){ const sel = $('#monthSelect'); sel.innerHTML=''; names.sort().reverse(); names.forEach(s=>{ const val = s.replace('Hisab-',''); const opt = document.createElement('option'); opt.value = val; const parts = val.split('-'); const d = new Date(Number(parts[0]), Number(parts[1])-1, 1); opt.textContent = d.toLocaleString('default',{month:'short',year:'numeric'}); sel.appendChild(opt); }); const defaultYM = (new Date()).getFullYear() + '-' + ('0'+(new Date().getMonth()+1)).slice(-2); if([...sel.options].some(o=>o.value===defaultYM)) sel.value = defaultYM; if(!sel.value && sel.options.length) sel.selectedIndex = 0; if(sel.value) state.currentSheet = 'Hisab-' + sel.value; $('#monthLabel').textContent = (state.currentSheet||'').replace('Hisab-',''); }
+
+function populateCategorySelect(cats){ const sel = $('#categorySelect'); sel.innerHTML=''; const list = Array.isArray(cats) && cats.length ? cats : ['Uncategorized','Food','Salary']; list.forEach(c=>{ const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); }); }
+
+/* fetch sheet */
+async function fetchSheet(sheetName){ showLoader(true); try{ const res = await safeGet({ action:'fetch', sheet: sheetName }); if(res && !res.error){ state.rows = (res.rows||[]).map(r=>({ rowIndex: r.rowIndex, date: toDDMMYYYYFromISO(r.date), description: r.description, category: r.category, amount: Number(r.amount), balance: Number(r.balance) })); state.currentSheet = res.sheet || sheetName; computeState(); } else console.error('fetchSheet', res && res.error); }catch(e){console.error(e);} finally{ showLoader(false); } }
+
+function computeState(){ let income=0, expense=0, bal=0; const cats={}; state.rows.forEach(r=>{ if(r.amount>0) income += r.amount; else expense += Math.abs(r.amount); bal = r.balance; cats[r.category] = (cats[r.category]||0) + r.amount; }); state.income = income; state.expense = expense; state.balance = bal; state.categoriesMap = cats; $('#monthLabel').textContent = (state.currentSheet||'').replace('Hisab-',''); renderReport(); }
+
+/* add/update/delete */
+let editingRow = null;
+$('#submitBtn').addEventListener('click', async ()=>{
+  if(!state.currentSheet) return alert('Select or create a month first (Report → New)');
+  const dateIso = $('#date').value || (new Date()).toISOString().slice(0,10);
+  const dateForSheet = toSheetDateFromPicker(dateIso);
+  const desc = $('#desc').value || '-';
+  const category = $('#categorySelect').value || 'Uncategorized';
+  const amount = Number($('#amount').value || 0);
+  if(!amount) return alert('Enter a non-zero amount');
+  $('#submitBtn').disabled = true; showLoader(true);
+  try{
+    if(editingRow){
+      const payload = { action:'update', sheet: state.currentSheet, row: editingRow, item: { date: dateForSheet, description: desc, category: category, amount: amount } };
+      const res = await safePost(payload);
+      if(res && res.ok){ await fetchSheet(state.currentSheet); resetEntryForm(); } else throw new Error(res && res.error ? res.error : 'Update failed');
+    } else {
+      const payload = { action:'add', sheet: state.currentSheet, item: { date: dateForSheet, description: desc, category: category, amount: amount } };
+      const res = await safePost(payload);
+      if(res && res.ok){ await fetchSheet(state.currentSheet); resetEntryForm(); } else throw new Error(res && res.error ? res.error : 'Add failed');
+    }
+  }catch(err){ alert('Save failed: ' + (err && err.message?err.message:err)); console.error(err); } finally{ $('#submitBtn').disabled = false; showLoader(false); }
+});
+
+$('#deleteBtn').addEventListener('click', async ()=>{
+  if(!editingRow) return;
+  if(!confirm('Delete this entry?')) return;
+  showLoader(true); $('#deleteBtn').disabled = true;
+  try{
+    const res = await safePost({ action:'delete', sheet: state.currentSheet, row: editingRow });
+    if(res && res.ok){ await fetchSheet(state.currentSheet); resetEntryForm(); } else throw new Error(res && res.error?res.error:'Delete failed');
+  }catch(err){ alert('Delete failed: ' + (err && err.message?err.message:err)); console.error(err); } finally{ $('#deleteBtn').disabled = false; showLoader(false); }
+});
+
+/* render */
+function renderReport(){ $('#incomeVal').textContent = '₹' + formatNumber(state.income); $('#expenseVal').textContent = '₹' + formatNumber(state.expense); $('#balVal').textContent = '₹' + formatNumber(state.balance); renderTable(); renderPie(); }
+function renderTable(){ const tbody = document.querySelector('#historyTable tbody'); tbody.innerHTML = ''; const arr = state.rows.slice().reverse(); arr.forEach(r=>{ const tr = document.createElement('tr'); tr.innerHTML = '<td title="'+escapeHTML(r.date)+'">'+escapeHTML(r.date)+'</td><td title="'+escapeHTML(r.description)+'" class="truncate">'+escapeHTML(r.description)+'</td><td title="'+escapeHTML(r.category)+'">'+escapeHTML(r.category)+'</td><td class="small-amt">'+formatNumber(r.amount)+'</td><td class="small-amt">'+formatNumber(r.balance)+'</td>'; tr.style.cursor='pointer'; tr.addEventListener('click', ()=>{ startEditRow(r); }); tbody.appendChild(tr); }); }
+function renderPie(){ const canvas = $('#catChart'); const ctx = canvas.getContext('2d'); canvas.width = canvas.clientWidth; canvas.height = 150; ctx.clearRect(0,0,canvas.width,canvas.height); const cats = state.categoriesMap || {}; const keys = Object.keys(cats); if(keys.length===0){ ctx.fillStyle='rgba(255,255,255,0.06)'; ctx.font='12px sans-serif'; ctx.fillText('No data Available',10,80); return; } const total = keys.reduce((s,k)=>s+Math.abs(cats[k]||0),0); const colors = keys.map((k,i)=>`hsl(${(i*73)%360} 78% 57%)`); let start=-Math.PI/2; const cx = canvas.width*0.32, cy = canvas.height/2, r = Math.min(canvas.width*0.22,56); keys.forEach((k,i)=>{ const val = Math.abs(cats[k]||0); const ang = (val/total)*Math.PI*2; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,start,start+ang); ctx.closePath(); ctx.fillStyle = colors[i]; ctx.fill(); start += ang; }); ctx.font='12px sans-serif'; let lx=Math.round(canvas.width*0.58), ly=28; keys.forEach((k,i)=>{ ctx.fillStyle = colors[i]; ctx.fillRect(lx, ly + (i*16) - 10, 10, 10); ctx.fillStyle = 'white'; ctx.fillText(k + ' (' + formatNumber(cats[k]) + ')', lx + 14, ly + (i*16)); }); }
+
+/* edit helpers */
+function startEditRow(r){ editingRow = r.rowIndex; $('#date').value = (function(d){ if(!d) return ''; const m = d.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if(m) return m[3]+'-'+m[2]+'-'+m[1]; return ''; })(r.date); $('#amount').value = r.amount; $('#desc').value = r.description; $('#categorySelect').value = r.category; $('#deleteBtn').style.display = 'inline-block'; document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); document.querySelector('.tab[data-tab="entry"]').classList.add('active'); document.getElementById('entry').style.display='block'; document.getElementById('report').style.display='none'; }
+function resetEntryForm(){ editingRow = null; $('#date').value=''; $('#amount').value=''; $('#desc').value=''; $('#categorySelect').selectedIndex = 0; $('#deleteBtn').style.display='none'; }
+
+/* categories & months */
+$('#addCatBtn').addEventListener('click', async ()=>{ const name = prompt('New category name'); if(!name) return; showLoader(true); try{ const res = await safePost({ action:'addCategory', category: name }); if(res && res.ok){ populateCategorySelect(res.categories||[]); $('#categorySelect').value = name; } else throw new Error(res && res.error?res.error:'Add category failed'); }catch(err){ alert('Add category failed: ' + (err && err.message?err.message:err)); } finally{ showLoader(false); } });
+
+$('#createMonthBtn').addEventListener('click', async ()=>{ const defaultYM = (new Date()).getFullYear() + '-' + ('0'+(new Date().getMonth()+1)).slice(-2); const ym = prompt('Enter new month (YYYY-MM)', defaultYM); if(!ym) return; if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(ym)) return alert('Invalid format'); showLoader(true); try{ const res = await safePost({ action:'createMonth', month: ym }); if(res && res.ok){ await loadLists(); $('#monthSelect').value = ym; await fetchSheet('Hisab-' + ym); alert('Month created'); } else throw new Error(res && res.error?res.error:'Create month failed'); }catch(err){ alert('Create month failed: ' + (err && err.message?err.message:err)); } finally{ showLoader(false); } });
+
+$('#monthSelect').addEventListener('change', async function(){ if(!this.value) return; await fetchSheet('Hisab-' + this.value); });
+$('#refreshBtn').addEventListener('click', async ()=>{ const sel = $('#monthSelect'); if(!sel||!sel.value) return alert('Select month'); await fetchSheet('Hisab-' + sel.value); });
+
+$('#downloadBtn').addEventListener('click', ()=>{ if(!state.rows||state.rows.length===0) return alert('No rows'); const header = ['Date','Description','Category','Amount','Balance']; const lines = [header.join(',')]; state.rows.forEach(r=> lines.push([r.date,r.description,r.category,r.amount,r.balance].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')) ); const blob = new Blob([lines.join('\n')], { type:'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = ((state.currentSheet||'hisab').replace('Hisab-','hisab-')) + '.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); });
+
+/* tabs */
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', ()=>{ document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active'); const tab = t.dataset.tab; document.getElementById('entry').style.display = (tab==='entry')?'block':'none'; document.getElementById('report').style.display = (tab==='report')?'block':'none'; if(tab==='report') renderReport(); }));
+
+/* init */
+(async function init(){ showLoader(true); await loadLists(); const sel = $('#monthSelect'); if(sel && sel.value) await fetchSheet('Hisab-' + sel.value); showLoader(false); })();
+</script>
+</body>
+</html>
